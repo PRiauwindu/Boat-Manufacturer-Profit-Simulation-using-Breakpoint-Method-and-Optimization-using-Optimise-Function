@@ -1,5 +1,5 @@
 ---
-title: "Breakpoints Method Simulation"
+title: "Boat Manufacturer Profit Simulation using Breakpoint Method and Profit Optimization using Optimise Function"
 knit: (function(input_file, encoding) {
   out_dir <- 'docs';
   rmarkdown::render(input_file,
@@ -15,27 +15,74 @@ output:
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-Importing relevant libraries to answer the assignment question
+## Introduction
+
+GWS is a company that markets outboard motorboats directly to consumers for recreational use. Recently, they’ve been developing a project they think has a lot of potential: the first mass market boats with electric motors. They haven’t started advertising their new product yet, nor have they organized a presale because they don’t want to lose their first-mover advantage. As a result, GWS has a limited understanding of the size of the market for their new project. They plan to retail their boats for $150,000, but after two years, when competition enters the market and the novelty factor wears off, they’ll have to drop the price to $70,000. They hire a consultant who estimates that at this price point, over the next two years, demand for the new boats will be somewhere between 2,000 and 15,000, with probabilities as in the table below:
+
+![Demand Distribution](Demand Distribution.png){style="display:block; margin:auto;"}
+
+The fixed cost of manufacturing any number of boats is normally distributed, with a mean of $300 million and a standard deviation of $60 million. They estimate that the variable cost to produce one boat will be a minimum of $77 thousand and a maximum of $100 thousand, with a most likely value of $90,000.
+
+This work covers:
+
+**1. The simulation of expected total profit over the two year period assuming they produce:**
+
+- 4,000 boats
+
+- 8,000 boats
+
+- 12,000 boats
+
+- 15,000 boats
+
+including the visualization of:
+
+- line/ribbon plot depicting the mean profit as well as an 80% and a 95% confidence interval for GWS’ profit if they create between 2000 and 15000 boats, counting by increments of 1000.
+
+- overlapping density plots depicting the distribution of GWS’ profit, assuming they create 2000, 4000, 6000, 8000, 10000, 12000, or 14,000 boats.
+
+Analysis utilized Monte Carlo Simulation to incorporate uncertainty factor for the expected profit for GWS company.
+
+**2. Optimization analysis to determine the number of boats GWS should produce to maximize:**
+
+- GWS expected profit
+
+- The 10th percentile of GWS profit
+
+- The probability that GWS will earn a profit of at least $50 million
+
+## Analysis
+
+### Importing relevant libraries 
 
 ```{r Importing Relevant Library, warning=FALSE, message=FALSE}
 library(tidyverse)
 library(stats)
 library(triangle)
 library(fitdistrplus)
+library(purrr)
+library(scales)
+library(reshape2)
+library(formattable)
+library(matrixcalc)
+library(Matrix)
+library(MultiRNG)
+library(DEoptim)
 ```
+
+### Calculating Profit
 
 Profit is calculated by using formula Profit = Revenue - Total Cost
 
 In the context of GWS profit, calculation for the total expected profit for GWS with several production scenarios (4000, 8000, 12000, and 15000 boats) could be modeled by modeling the variables that affect the profit as follows: 
 
-1. Revenue
+#### 1. Revenue
 
-As suggested by the assignment question, GWS is expecting the demand to be somewhere between 2,000 and 15,000, with probabilities as shown in below table 
-![Demand Distribution](Demand Distribution.png){style="display:block; margin:auto;"}
+As suggested by the assignment question, GWS is expecting the demand to be somewhere between 2,000 and 15,000, with probabilities as shown in the introduction part. The demand could be modeled using the Breakpoints Method and then the Revenue could be broken down into two parts:
 
-Above demands scenario could be modeled using the Breakpoints Method and then the Revenue could be modeled using following equation:
+1. Revenue_sales = (Demand Distribution * Selling Price) if the simulated demand is more than or equal to production.
 
-Revenue = Demand Distribution * Selling Price
+2. Revenue_left = (Inventory Left-over * Adjusted Selling Price) if the simulated demand is less than production. Inventory Left-over is the number of boats that is not being sold in that particular simulation iteration.
 
 Below code will be used to estimate the Revenue for each of the production scenario. Note that for each of the production scenario, 10,000 Monte Carlo simulation will be conducted:
 
@@ -47,11 +94,14 @@ set.seed(616)
 probs <- c(0.35, 0.75, 0.95, 1)
 ints <- c(2000, 5001, 10001, 14001, 15000)
 
-# Creating vector of production scenarios
-boat_production <- c(4000, 8000, 12000, 15000)
+# Creating vector of production scenarios question 1a
+boat_production <- seq(from = 2000, to = 15000, by = 1000)
+# Creating vector of production scenarios question 1b
+boat_production_2 <- c(2000, 4000, 6000, 8000, 10000, 12000, 14000)
 
 #Assigning variables to sale price of a boat
-sale_price <- 250000
+sale_price <- 150000
+sale_price_left <- 70000
 
 # Assigning number of Monte Carlo Iterations
 n <- 10000
@@ -64,7 +114,6 @@ demand <- case_when(p<probs[1]~runif(n,ints[1],ints[2]),
                p<probs[2]~runif(n,ints[2],ints[3]),
                p<probs[3]~runif(n,ints[3],ints[4]),
                p<probs[4]~runif(n,ints[4],ints[5]))
-hist(demand)
 
 # Creating function to calculate expected revenue
 expected_revenue <- function(number_production){
@@ -74,30 +123,53 @@ expected_revenue <- function(number_production){
   return(revenue)
 }
 
-# Calculating revenue for all four production scenarios
+# Calculating revenue for all four production scenarios question 1a
 revenue_all <- lapply(boat_production, expected_revenue)
-str(revenue_all)
+# Calculating revenue for all four production scenarios question 1b
+revenue_all_2 <- lapply(boat_production_2, expected_revenue)
+
+# Calculating revenue for the rest of the boat that was not being sold in first 2 years
+boat_left_revenue <- function(number_production){
+  rv_demand <- demand
+  m_rev_left <- rv_demand - number_production
+  left_revenue <- ifelse(m_rev_left>0, 0, rv_demand*sale_price_left)
+  return(left_revenue)
+}
+
+# Calculating left revenue for all four production scenarios question 1a
+revenue_all_left <- lapply(boat_production, boat_left_revenue)
+# Calculating left revenue for all four production scenarios question 1b
+revenue_all_left_2 <- lapply(boat_production_2, boat_left_revenue)
+
+# Calculating total revenue question 1a
+total_revenue <- map2(revenue_all, revenue_all_left, ~ .x + .y)
+# Calculating total revenue question 1b
+total_revenue_2 <- map2(revenue_all_2, revenue_all_left_2, ~ .x + .y)
+
 ```
 
-2. Fixed Cost
+#### 2. Fixed Cost
 
 As explained in the assignment prompt, The fixed cost of manufacturing any number of boats is normally distributed, with a mean of 300 million dollar and a standard deviation of 60 million dollar. Therefore, Fixed Cost could be modeled by using Normal Distribution.
 
 Below code will be used to model the fixed cost to manufacture the boat as a normal distribution.
 
 ```{r fixed cost}
+# Setting seed for reproducibility
 set.seed(616)
+# Calculating fixed cost
 fixed_cost <- rnorm(n=n, mean=300000000, sd=60000000)
 hist(fixed_cost, main="Histogram of the Fixed Cost", xlab="Total Fixed Cost(USD")
 ```
 
-3. Variable Cost
+#### 3. Variable Cost
 
 The company expect that the variable cost to produce one boat will be a minimum of 77 thousand dollar and a maximum of 100 thousand dollar, with a most likely value of 90,000 dollar. The variable cost could therefore be modeled using the Triangular Distribution.
 
 Below code will be used to model the variable cost using Triangular Distribution
 
 ```{r Variable Cost}
+# Calculating variable cost
 variable_cost <- function(number_production){
   set.seed(616)
   variablecost_rv <- rtriangle(n=10000, a=77000, b=100000, c=90000)
@@ -106,33 +178,38 @@ variable_cost <- function(number_production){
 
 # Calculating variable cost for each of the production scenario
 variable_cost_all <- lapply(boat_production, variable_cost)
-str(variable_cost_all)
 
 # Checking the histogram of one of the production scenario variable cost
 hist(variable_cost_all[[1]], main="Total Variable Cost Histogram for 4000 Boats Production", xlab="Total Variable Cost(USD)")
 ```
 
-4. Total Cost
+#### 4. Total Cost
 
 Total cost to manufacture a boat will be the total of the fixed cost and variable cost. Below code will be used to calculate the total cost to manufacture the boat for each of the production scenario.
 
 ```{r Question 1 Total Cost}
+# Calculating total cost
 total_cost <- lapply(variable_cost_all, function(x) x + fixed_cost)
-str(total_cost)
 
 # Checking the histogram of one of the production scenario total cost
 hist(total_cost[[1]], main="Histogram of Total Cost for 4000 Boats Production")
 ```
+
 After modeling each of the components from the profit equation, the profit distribution for each of the production scenario are as follow:
 
 ```{r Profit Distribution Calculation}
-profit_all <- Map("-", revenue_all, total_cost)
-str(profit_all)
+# Calculating profit all for line and ribbon plot to depict mean profit with 80% and 95% confidence interval
+profit_all <- Map("-", total_revenue, total_cost)
+profit_all_2 <- format(profit_all, scientific = FALSE)
+# Calculating profit all for overlapped density plot of mean profit
+profit_all_3 <- Map("-", total_revenue_2, total_cost)
+profit_all_4 <- format(profit_all_3, scientific = FALSE)
 ```
 
-Plotting the histogram and calculating mean & standard deviation for each of the production scenarios
+### Plotting Histogram and Calculating Mean & Standard Deviation
 
 1. 4000 Boats Production
+
 ```{r 4000 boats}
 # Histogram
 hist(profit_all[[1]], main="Profit Distribution of 4000 Boats Production", xlab="Profit(USD)")
@@ -143,6 +220,7 @@ paste("Standard Deviation of profit(loss) for 4000 boats production is (USD):", 
 ```
 
 2. 8000 Boats Production
+
 ```{r 8000 boats}
 # Histogram
 hist(profit_all[[2]], main="Profit Distribution of 8000 Boats Production", xlab="Profit(USD)")
@@ -153,6 +231,7 @@ paste("Standard Deviation of profit(loss) for 8000 boats production is (USD):", 
 ```
 
 3. 12000 Boats Production
+
 ```{r 12000 boats}
 # Histogram
 hist(profit_all[[3]], main="Profit Distribution of 12000 Boats Production", xlab="Profit(USD)")
@@ -163,6 +242,7 @@ paste("Standard Deviation of profit(loss) for 12000 boats production is (USD):",
 ```
 
 4. 15000 Boats Production
+
 ```{r 15000 boats}
 # Histogram
 hist(profit_all[[4]], main="Profit Distribution of 15000 Boats Production", xlab="Profit(USD)")
@@ -170,4 +250,213 @@ hist(profit_all[[4]], main="Profit Distribution of 15000 Boats Production", xlab
 paste("Mean of profit(loss) for 15000 boats production is (USD):",mean(profit_all[[4]])%>%round(2))
 # Standard Deviation
 paste("Standard Deviation of profit(loss) for 15000 boats production is (USD):", sd(profit_all[[4]])%>%round(2))
+```
+
+### Line and Ribbon Plot of Mean Profit
+
+Plotting line and ribbon plot to depict mean profit with 80% and 95% confidence interval 
+
+```{r plotting line and ribbon plot}
+# Calculating the mean
+profit_mean <- sapply(profit_all, mean)
+
+# Calculating quantile of 0.1 and 0.9 to deduce the 80% confidence interval
+quantile_0.1 <- sapply(profit_all, function(x) quantile(x, 0.1))
+quantile_0.9 <- sapply(profit_all, function(x) quantile(x, 0.9))
+
+# Calculating quantile of 0.025 and 0.975 to deduce the 95% confidence interval
+quantile_0.025 <- sapply(profit_all, function(x) quantile(x, 0.025))
+quantile_0.975 <- sapply(profit_all, function(x) quantile(x, 0.975))
+
+# Creating dataframe for plot
+plot_df <- data.frame (production = boat_production, meanprofit = profit_mean, 
+                       q_0.1 = quantile_0.1, q_0.9 = quantile_0.9, 
+                       q_0.025 = quantile_0.025,q_0.975 = quantile_0.975)
+
+# plotting line and ribbon plot showing the 80% and 95% confidence interval
+ggplot(plot_df) +
+  geom_ribbon(aes(x=production,ymin=q_0.1, ymax=q_0.9),alpha=0.3,fill='#8FC7ED') +
+  geom_ribbon(aes(x=production,ymin=q_0.025,ymax=q_0.975),alpha=0.4,fill='#3F90C1') +
+  geom_line(aes(x=production,y=meanprofit), color="#0C2C84", size=0.7) +
+  scale_y_continuous(labels=scales::dollar_format(),expand=c(0,0)) +
+  ggtitle("Profit Distribution of Boat Manufacturer with 80% and 95% CI") +
+  xlab("Number of Boat Production") + 
+  ylab("Mean of the Simulated Profit") +
+  theme_light() + geom_hline(yintercept = 0, linetype = "dashed", color = "red", size=0.7)
+
+```
+
+### Overlapped Density Plot of Mean Profit
+
+Plotting the overlapped density plot for mean expected profit
+
+```{r Density Plot, warning=FALSE, message=FALSE}
+# Bind the vectors together into a data frame
+profit_df <- data.frame(matrix(unlist(profit_all_3), ncol = 7, byrow = FALSE))
+colnames(profit_df) <- c("boat_2000", "boat_4000","boat_6000", "boat_8000", 
+                         "boat_10000", "boat_12000","boat_14000")
+
+# Melt the data frame into long format
+profit_df_long <- reshape2::melt(profit_df)
+
+# Plotting overlapped density plot of production scenario 2000, 4000, 6000, 8000, 10000,12000, and 14000
+ggplot(profit_df_long, aes(x = value, color=variable, fill=variable)) +
+  geom_density(alpha = 0.5) +
+  scale_color_manual(values = c("#FFC300", "#FFA700", "#FF8C00", "#FF6F00", 
+                                         "#FF5200", "#FF3700", "#FF1A00")) +
+  scale_fill_manual(values = c("#FFC300", "#FFA700", "#FF8C00", "#FF6F00", 
+                                         "#FF5200", "#FF3700", "#FF1A00")) +
+  scale_x_continuous(labels=scales::dollar_format(),expand=c(0,0)) +
+  ggtitle("Profit Distribution of Boat Manufacturer") +
+  xlab("Profit") + 
+  ylab("Density Value") +
+  theme_light()
+
+# Plot density curves of production scenario 2000, 4000, 6000, 8000, 10000,12000, and 14000, separated by facet
+ggplot(profit_df_long, aes(x = value)) +
+  geom_density() +
+  facet_wrap(~variable, scales = "free_x") +
+  scale_x_continuous(labels=scales::dollar_format(),expand=c(0,0)) +
+  ggtitle("Profit Distribution of Boat Manufacturer") +
+  xlab("Profit") + 
+  ylab("Density Value") +
+  theme_light()
+```
+
+## Number of Boat Production Optimization
+
+Performing simulation optimization to determine the number of boats GWS should produce to maximize profit in three different approach:
+
+**1. Optimizing number of boats to produce to maximize mean/expected profit**
+
+```{r Simulation Optimization using Expected Value}
+# Creating function to calculate the expected profit/mean profit
+mean_profit<-function(number_of_boat){
+  set.seed(616)
+  n = 10000 # setting the simulation iterations
+  sale_price <- 150000
+  sale_price_left <- 70000
+  p = runif(n) # Setting the randomly generated probability using Uniform Dist
+  probs <- c(0.35, 0.75, 0.95, 1)
+  ints <- c(2000, 5001, 10001, 14001, 15000)
+  demand =  case_when(p<probs[1]~runif(n,ints[1],ints[2]),
+               p<probs[2]~runif(n,ints[2],ints[3]),
+               p<probs[3]~runif(n,ints[3],ints[4]),
+               p<probs[4]~runif(n,ints[4],ints[5]))
+  rv_demand <- demand
+  m_rev <- rv_demand - number_of_boat
+  revenue <- ifelse(m_rev>0, number_of_boat*sale_price, rv_demand*sale_price)
+  m_rev_left <- rv_demand - number_of_boat
+  left_revenue <- ifelse(m_rev>0, 0, rv_demand*sale_price_left)
+  total_revenue <- revenue + left_revenue
+  fixed_cost <- rnorm(n=n, mean=300000000, sd=60000000)
+  variablecost_rv <- rtriangle(n=10000, a=77000, b=100000, c=90000)
+  var_cost <- number_of_boat * variablecost_rv
+  profit <- revenue + left_revenue - fixed_cost - var_cost
+  return(mean(profit))
+}
+```
+
+Finding the number of boat to produce to maximize mean profit using function created above:
+
+```{r Finding the maximum profit}
+# Testing the mean_profit function
+cat("The mean profit/loss of manufacturing 2000 boats is", mean_profit(number_of_boat = 2000) %>% format(big.mark = ","), "USD\n\n")
+
+# Optimizing the objective function using optimise function
+opt_model <- optimise(f=mean_profit,interval=c(2000,15000),maximum=TRUE)
+
+# Checking for the optimized function parameter
+cat ("The number of boat that GWS should produce to maximize profit based on 10000 simulations is", opt_model$maximum %>% ceiling %>% format(big.mark = ","), "units\n\n")
+
+cat ("The expected profit from manufacturing above number of recommended boats is", opt_model$objective %>% ceiling %>% format(big.mark = ","), "USD")
+
+```
+
+**2. Optimizing number of boats to produce to maximize the 10th percentile of GWS profit distribution**
+
+```{r maximizing 10th percentile of the profit}
+# Creating function to calculate the 10th percentile profit
+quantile10_profit<-function(number_of_boat){
+  set.seed(616)
+  n = 10000
+  sale_price <- 150000
+  sale_price_left <- 70000
+  p = runif(n)
+  probs <- c(0.35, 0.75, 0.95, 1)
+  ints <- c(2000, 5001, 10001, 14001, 15000)
+  demand =  case_when(p<probs[1]~runif(n,ints[1],ints[2]),
+               p<probs[2]~runif(n,ints[2],ints[3]),
+               p<probs[3]~runif(n,ints[3],ints[4]),
+               p<probs[4]~runif(n,ints[4],ints[5]))
+  rv_demand <- demand
+  m_rev <- rv_demand - number_of_boat
+  revenue <- ifelse(m_rev>0, number_of_boat*sale_price, rv_demand*sale_price)
+  m_rev_left <- rv_demand - number_of_boat
+  left_revenue <- ifelse(m_rev>0, 0, rv_demand*sale_price_left)
+  total_revenue <- revenue + left_revenue
+  fixed_cost <- rnorm(n=n, mean=300000000, sd=60000000)
+  variablecost_rv <- rtriangle(n=10000, a=77000, b=100000, c=90000)
+  var_cost <- number_of_boat * variablecost_rv
+  profit <- revenue + left_revenue - fixed_cost - var_cost
+  return(quantile(profit, 0.1))}
+```
+
+Finding the number of boat to produce to maximize profit in the 10th percentile using function created above:
+
+```{r finding maximum profit of the 10th percentile}
+# Testing the quantile10_profit function
+cat("The mean profit/loss of manufacturing 2000 boats is", quantile10_profit(number_of_boat = 2000) %>% format(big.mark = ","), "USD\n\n")
+
+# Optimizing the objective function using optimise function
+opt_model_2 <- optimise(f=quantile10_profit,interval=c(2000,15000),maximum=TRUE)
+
+# Checking for the optimized function parameter
+cat ("The number of boat that GWS should produce to maximize profit on its 10th percentile profit distribution based on 10000 simulations is", opt_model_2$maximum %>% ceiling %>% format(big.mark = ","), "units\n\n")
+
+cat ("The maximized profit on the 10th percentile of the profit distribution from manufacturing above number of recommended boats is", opt_model_2$objective %>% ceiling %>% format(big.mark = ","), "USD")
+
+```
+
+**2. Optimizing number of boats to produce to maximize the probability of earning a profit of at least $50 million**
+
+```{r maximizing probability of earning profit 50 million}
+# Creating function to calculate probability of getting the profit at least 50 million
+mean_profit_50mil<-function(number_of_boat){
+  set.seed(616)
+  n = 10000
+  sale_price <- 150000
+  sale_price_left <- 70000
+  p = runif(n)
+  probs <- c(0.35, 0.75, 0.95, 1)
+  ints <- c(2000, 5001, 10001, 14001, 15000)
+  demand =  case_when(p<probs[1]~runif(n,ints[1],ints[2]),
+               p<probs[2]~runif(n,ints[2],ints[3]),
+               p<probs[3]~runif(n,ints[3],ints[4]),
+               p<probs[4]~runif(n,ints[4],ints[5]))
+  rv_demand <- demand
+  m_rev <- rv_demand - number_of_boat
+  revenue <- ifelse(m_rev>0, number_of_boat*sale_price, rv_demand*sale_price)
+  m_rev_left <- rv_demand - number_of_boat
+  left_revenue <- ifelse(m_rev>0, 0, rv_demand*sale_price_left)
+  total_revenue <- revenue + left_revenue
+  fixed_cost <- rnorm(n=n, mean=300000000, sd=60000000)
+  variablecost_rv <- rtriangle(n=10000, a=77000, b=100000, c=90000)
+  var_cost <- number_of_boat * variablecost_rv
+  profit <- revenue + left_revenue - fixed_cost - var_cost
+  return(mean(profit>=50000000))
+}
+```
+
+Finding the number of boat to produce that return the highest probability of generating profit at least 50 million USD
+
+```{r finding the highest probability}
+# Testing the quantile10_profit function
+cat("The probability of getting profit of at least 50 million by manufacturing 2000 boats is", mean_profit_50mil(number_of_boat = 2000) %>% format(scientific = FALSE),"\n\n")
+ 
+# Optimizing the objective function using optimise function
+opt_model_3 <- optimise(f=mean_profit_50mil,interval=c(2000,15000),maximum=TRUE)
+
+# Checking for the optimized function parameter
+cat("The number of boat to produce to get the highest probability of getting profit of at least 50 million USD is",opt_model_3$maximum %>% ceiling(),".","That would yield the probability of", opt_model_3$objective %>% round(2) %>% format (scientific=FALSE), "from the entire simulation sample space.")
 ```
