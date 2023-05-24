@@ -2,7 +2,7 @@
 
 GitHub Pages: https://priauwindu.github.io/Breakpoints-Method-Simulation-for-Boat-Manufacturer/
 
-Performing Breakpoints Method to simulate boat manufacturer profit distribution given the uncertain demands with unknown data for a hypothetical company named GWS. 
+Performing Profit Simulation using Breakpoint Method and Profit Optimization using Optimise Function given the uncertain demands with unknown data for a hypothetical company named GWS. 
 
 ## Introduction
 
