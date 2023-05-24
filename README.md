@@ -20,7 +20,7 @@ The fixed cost of manufacturing any number of boats is normally distributed, wit
 
 This work covers: 
 
-1. The simulation of expected total profit over the two year period assuming they produce. 
+**1. The simulation of expected total profit over the two year period assuming they produce.** 
 
 - 4,000 boats
 - 8,000 boats
@@ -33,7 +33,7 @@ including the visualization of:
 
 Analysis utilized Monte Carlo Simulation to incorporate uncertainty factor for the expected profit for GWS company.
 
-2. Optimization analysis to determine the number of boats GWS should produce to maximize:
+**2. Optimization analysis to determine the number of boats GWS should produce to maximize:**
 - Their expected profit
 - The 10th percentile of their profit
 - The probability that they will earn a profit of at least $50 million
