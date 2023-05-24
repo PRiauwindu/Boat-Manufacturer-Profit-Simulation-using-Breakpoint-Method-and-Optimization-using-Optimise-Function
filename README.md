@@ -1,4 +1,4 @@
-# Breakpoints-Method-Simulation-for-Boat-Manufacturer
+# Boat Manufacturer Profit Simulation using Breakpoint Method and Profit Optimization using Optimise Function
 
 GitHub Pages: https://priauwindu.github.io/Breakpoints-Method-Simulation-for-Boat-Manufacturer/
 
